@@ -1,4 +1,29 @@
 {
-  "unit_tests": 42,
-  "table_metrics": "TODO: measured value (AnalysisException)"
+  "data": "SYNTHETIC (CMS layout). Real CMS files were not reachable; see docs/progress.md",
+  "unit_tests": 45,
+  "rows": {
+    "bronze.provider_drug_raw": 172565,
+    "bronze.geo_drug_raw": 6870,
+    "silver.prescription": 171995,
+    "silver.prescriber_year": 8000,
+    "silver.drug_year": 1145,
+    "silver.geo_drug": 6870,
+    "silver.quarantine": 570,
+    "gold.drug_year_summary": 1145,
+    "gold.state_year_summary": 10,
+    "gold.specialty_year_summary": 20,
+    "gold.reconciliation_year": 10
+  },
+  "years": [
+    2022,
+    2023
+  ],
+  "states": 5,
+  "gold_tables": 4,
+  "distinct_dq_checks": 15,
+  "quarantine_pct": 0.33,
+  "claim_coverage_min_max": [
+    0.9229,
+    0.9242
+  ]
 }

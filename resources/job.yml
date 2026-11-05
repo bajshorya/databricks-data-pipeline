@@ -44,6 +44,8 @@ resources:
         - task_key: check_silver
           depends_on:
             - task_key: build_silver
+          # A failed quality gate is deterministic, so a retry only burns compute quota.
+          max_retries: 0
           environment_key: default
           spark_python_task:
             python_file: ../jobs/run_check_silver.py
@@ -74,6 +76,8 @@ resources:
         - task_key: check_gold
           depends_on:
             - task_key: build_gold
+          # A failed quality gate is deterministic, so a retry only burns compute quota.
+          max_retries: 0
           environment_key: default
           spark_python_task:
             python_file: ../jobs/run_check_gold.py

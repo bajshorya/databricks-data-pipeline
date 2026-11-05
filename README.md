@@ -2,7 +2,7 @@
 
 A tested Bronze, Silver and Gold batch pipeline on Databricks Free Edition. It turns CMS's yearly Medicare Part D prescriber files into Delta tables and four dashboard queries.
 
-**Status:** the pipeline code, tests and CI are complete and pass locally. It has **not yet run on Databricks or on real CMS data** (see `docs/progress.md`). Findings and screenshots below are placeholders until it does.
+**Status:** complete and running on Databricks Free Edition, **on synthetic data in the CMS file layout**. `data.cms.gov` blocks downloads from the author's network in India (HTTP 403), so real files couldn't be fetched yet. Loading real data is a data step, not a code change. See `docs/progress.md`.
 
 ## Architecture
 
@@ -16,9 +16,18 @@ CMS CSV (streamed, filtered to chosen states, gzipped, hashed)   scripts/fetch_c
         5 serverless job tasks, deployed with a bundle            databricks.yml, resources/job.yml
 ```
 
+## What the synthetic run proved
+
+Numbers below come from `docs/metrics.json` and describe **synthetic data**, not real Medicare data.
+
+- 172,565 Bronze rows over 2 years and 5 states. Planted bad rows were caught exactly: 294 of 294 in 2022 (0.33% quarantined over both years).
+- A forced rerun of a year left every table's counts and money totals identical.
+- Cost totals agree to the cent across Silver and every Gold summary.
+- A file with 5% bad values stopped the job at the Silver quality gate. Gold was untouched, and a forced reload of the good file restored every table exactly.
+
 ## Findings
 
-TODO: measured value (needs a real run).
+TODO: measured value (needs real CMS data).
 
 ## Data limits
 

@@ -1,43 +1,53 @@
-"""Write docs/metrics.json from real counts. Run with a Spark session that can see the tables.
+"""Write docs/metrics.json from real counts, queried through the Databricks SQL warehouse.
 
-Usage on Databricks: run as a notebook/job with the same arguments; locally this only counts tests.
+Every number in the README and resume must come from this file. Never edit it by hand.
 """
 import json
 import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from sql import run
+
 ROOT = Path(__file__).parent.parent
+C = "workspace"
 
 
 def test_count() -> int:
-    out = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q"], check=False, cwd=ROOT,
-                         capture_output=True, text=True).stdout
+    out = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q"], check=False,
+                         cwd=ROOT, capture_output=True, text=True).stdout
     return int(out.strip().splitlines()[-1].split()[0])
 
 
-def table_metrics(spark, catalog: str, prefix: str = "partd") -> dict:
-    m = {}
-    for layer, tables in {"bronze": ["provider_drug_raw", "geo_drug_raw"],
-                          "silver": ["prescription", "prescriber_year", "drug_year", "geo_drug", "quarantine"],
-                          "gold": ["drug_year_summary", "state_year_summary", "specialty_year_summary",
-                                   "reconciliation_year"]}.items():
-        for t in tables:
-            m[f"{layer}.{t}"] = spark.table(f"{catalog}.{prefix}_{layer}.{t}").count()
-    dq = spark.table(f"{catalog}.{prefix}_ops.dq_results")
-    m["dq_distinct_checks"] = dq.select("check_name").distinct().count()
-    m["claim_coverage"] = [r.asDict() for r in spark.table(
-        f"{catalog}.{prefix}_gold.reconciliation_year").select("data_year", "state", "claim_coverage").collect()]
-    return m
+def scalar(q: str):
+    return run(q)[0][0]
+
+
+def main() -> int:
+    tables = {"bronze": ["provider_drug_raw", "geo_drug_raw"],
+              "silver": ["prescription", "prescriber_year", "drug_year", "geo_drug", "quarantine"],
+              "gold": ["drug_year_summary", "state_year_summary", "specialty_year_summary",
+                       "reconciliation_year"]}
+    m = {"data": "SYNTHETIC (CMS layout). Real CMS files were not reachable; see docs/progress.md",
+         "unit_tests": test_count(), "rows": {}}
+    for layer, names in tables.items():
+        for t in names:
+            m["rows"][f"{layer}.{t}"] = int(scalar(f"SELECT COUNT(*) FROM {C}.partd_{layer}.{t}"))
+    m["years"] = [int(r[0]) for r in run(
+        f"SELECT DISTINCT data_year FROM {C}.partd_silver.prescription ORDER BY 1")]
+    m["states"] = int(scalar(f"SELECT COUNT(DISTINCT state) FROM {C}.partd_silver.prescription"))
+    m["gold_tables"] = len(tables["gold"])
+    m["distinct_dq_checks"] = int(scalar(
+        f"SELECT COUNT(DISTINCT check_name) FROM {C}.partd_ops.dq_results"))
+    m["quarantine_pct"] = round(100 * m["rows"]["silver.quarantine"] / m["rows"]["bronze.provider_drug_raw"], 3)
+    m["claim_coverage_min_max"] = [float(x) for x in run(
+        f"SELECT ROUND(MIN(claim_coverage),4), ROUND(MAX(claim_coverage),4) "
+        f"FROM {C}.partd_gold.reconciliation_year")[0]]
+    (ROOT / "docs/metrics.json").write_text(json.dumps(m, indent=2))
+    print(json.dumps(m, indent=2))
+    return 0
 
 
 if __name__ == "__main__":
-    metrics = {"unit_tests": test_count()}
-    try:
-        from pyspark.sql import SparkSession
-        metrics.update(table_metrics(SparkSession.builder.getOrCreate(), "workspace"))
-    except Exception as e:  # noqa: BLE001  tables not reachable here: leave numbers out, never invent them
-        metrics["table_metrics"] = f"TODO: measured value ({type(e).__name__})"
-    (ROOT / "docs").mkdir(exist_ok=True)
-    (ROOT / "docs/metrics.json").write_text(json.dumps(metrics, indent=2, default=str))
-    print(json.dumps(metrics, indent=2, default=str))
+    sys.exit(main())

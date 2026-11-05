@@ -63,3 +63,15 @@ def test_zip_input_is_read_without_extracting(tmp_path):
     out = tmp_path / "out/provider_drug/data_year=2022/provider_drug_2022.csv.gz"
     assert rc == 0 and json.loads(Path(str(out) + ".profile.json").read_text())["kept_rows"] == 2
     assert not list(tmp_path.glob("*.csv"))                    # nothing was extracted
+
+
+def test_synthetic_generator_matches_schema_and_plants_known_bad_rows(tmp_path):
+    import make_synthetic
+
+    assert make_synthetic.main(["--out-dir", str(tmp_path), "--prescribers", "50", "--drugs", "40",
+                                "--bad-rate", "0.05", "--years", "2022"]) == 0
+    p = tmp_path / "provider_drug/data_year=2022/provider_drug_2022.csv.gz"
+    with gzip.open(p, "rt") as f:
+        header = f.readline().strip().split(",")
+    assert header == make_synthetic._load_columns("provider_drug")
+    assert json.loads(Path(str(p) + ".meta.json").read_text())["source_url"] == "synthetic"

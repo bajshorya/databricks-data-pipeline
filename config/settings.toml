@@ -13,7 +13,7 @@ volume = "landing"
 [data]
 sample_state = "RI"
 # Filled in by Stage 2 from real per-state row counts.
-project_states = ["RI"]
+project_states = ["RI", "MA", "CT", "VT", "NH"]  # synthetic run; real subset TBD
 years = [2022, 2023]
 
 [thresholds]

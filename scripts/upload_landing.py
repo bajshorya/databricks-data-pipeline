@@ -18,6 +18,8 @@ def main() -> int:
     for f in files:
         rel = f.relative_to(a.local_dir)  # {dataset}/data_year=YYYY/{file}
         dest = f"dbfs:/Volumes/{a.catalog}/{a.schema}/landing/{rel}"
+        # `fs cp` does not create parent folders on a Volume.
+        subprocess.run(["databricks", "fs", "mkdir", dest.rsplit("/", 1)[0]], check=True)
         subprocess.run(["databricks", "fs", "cp", str(f), dest, "--overwrite"], check=True)
         print("uploaded", dest)
     return 0
