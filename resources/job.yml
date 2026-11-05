@@ -1,0 +1,88 @@
+resources:
+  jobs:
+    partd_pipeline:
+      name: partd_pipeline
+      max_concurrent_runs: 1
+      parameters:
+        - name: data_year
+          default: "2024"
+        - name: force
+          default: "false"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "2"
+      tasks:
+        - task_key: load_bronze
+          environment_key: default
+          spark_python_task:
+            python_file: ../jobs/run_bronze.py
+            parameters:
+              - "--data-year={{job.parameters.data_year}}"
+              - "--force={{job.parameters.force}}"
+              - "--run-id={{job.run_id}}"
+              - "--catalog=${var.catalog}"
+              - "--schema-prefix=${var.schema_prefix}"
+              - "--src-path=${workspace.file_path}/src"
+              - "--config-dir=${workspace.file_path}/config"
+              - "--sql-dir=${workspace.file_path}/sql"
+        - task_key: build_silver
+          depends_on:
+            - task_key: load_bronze
+          environment_key: default
+          spark_python_task:
+            python_file: ../jobs/run_silver.py
+            parameters:
+              - "--data-year={{job.parameters.data_year}}"
+              - "--force={{job.parameters.force}}"
+              - "--run-id={{job.run_id}}"
+              - "--catalog=${var.catalog}"
+              - "--schema-prefix=${var.schema_prefix}"
+              - "--src-path=${workspace.file_path}/src"
+              - "--config-dir=${workspace.file_path}/config"
+              - "--sql-dir=${workspace.file_path}/sql"
+        - task_key: check_silver
+          depends_on:
+            - task_key: build_silver
+          environment_key: default
+          spark_python_task:
+            python_file: ../jobs/run_check_silver.py
+            parameters:
+              - "--data-year={{job.parameters.data_year}}"
+              - "--force={{job.parameters.force}}"
+              - "--run-id={{job.run_id}}"
+              - "--catalog=${var.catalog}"
+              - "--schema-prefix=${var.schema_prefix}"
+              - "--src-path=${workspace.file_path}/src"
+              - "--config-dir=${workspace.file_path}/config"
+              - "--sql-dir=${workspace.file_path}/sql"
+        - task_key: build_gold
+          depends_on:
+            - task_key: check_silver
+          environment_key: default
+          spark_python_task:
+            python_file: ../jobs/run_gold.py
+            parameters:
+              - "--data-year={{job.parameters.data_year}}"
+              - "--force={{job.parameters.force}}"
+              - "--run-id={{job.run_id}}"
+              - "--catalog=${var.catalog}"
+              - "--schema-prefix=${var.schema_prefix}"
+              - "--src-path=${workspace.file_path}/src"
+              - "--config-dir=${workspace.file_path}/config"
+              - "--sql-dir=${workspace.file_path}/sql"
+        - task_key: check_gold
+          depends_on:
+            - task_key: build_gold
+          environment_key: default
+          spark_python_task:
+            python_file: ../jobs/run_check_gold.py
+            parameters:
+              - "--data-year={{job.parameters.data_year}}"
+              - "--force={{job.parameters.force}}"
+              - "--run-id={{job.run_id}}"
+              - "--catalog=${var.catalog}"
+              - "--schema-prefix=${var.schema_prefix}"
+              - "--src-path=${workspace.file_path}/src"
+              - "--config-dir=${workspace.file_path}/config"
+              - "--sql-dir=${workspace.file_path}/sql"

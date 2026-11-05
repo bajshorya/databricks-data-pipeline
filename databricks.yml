@@ -1,0 +1,21 @@
+bundle:
+  name: medicare_partd_lakehouse
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog
+    default: workspace
+  schema_prefix:
+    description: Prefix for all project schemas
+    default: partd
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      # Set by Shorya: the Free Edition workspace URL (see docs/progress.md).
+      host: https://REPLACE-WITH-WORKSPACE-URL
