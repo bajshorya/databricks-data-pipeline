@@ -1,0 +1,23 @@
+[catalog]
+name = "workspace"
+
+[schemas]
+bronze = "partd_bronze"
+silver = "partd_silver"
+gold = "partd_gold"
+ops = "partd_ops"
+
+[landing]
+volume = "landing"
+
+[data]
+sample_state = "RI"
+# Filled in by Stage 2 from real per-state row counts.
+project_states = ["RI"]
+years = [2023, 2024]
+
+[thresholds]
+malformed_max_pct = 0.1
+quarantine_max_pct = 1.0
+unmatched_drug_max_pct = 1.0
+min_prescribers_specialty = 100

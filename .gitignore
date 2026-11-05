@@ -1,0 +1,13 @@
+.venv/
+data/
+.databricks/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.env
+*.csv
+*.csv.gz
+!tests/fixtures/**
+spark-warehouse/
+metastore_db/
+derby.log
