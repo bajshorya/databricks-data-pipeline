@@ -14,7 +14,7 @@ volume = "landing"
 sample_state = "RI"
 # Filled in by Stage 2 from real per-state row counts.
 project_states = ["RI"]
-years = [2023, 2024]
+years = [2022, 2023]
 
 [thresholds]
 malformed_max_pct = 0.1

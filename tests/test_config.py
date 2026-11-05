@@ -9,7 +9,7 @@ def test_settings_load():
     s = load_settings(CONFIG, catalog="spark_catalog")
     assert s.table("silver", "prescription") == "spark_catalog.partd_silver.prescription"
     assert s.landing_root == "/Volumes/spark_catalog/partd_ops/landing"
-    assert s.years == (2023, 2024)
+    assert s.years == (2022, 2023)
 
 
 def test_sources_have_both_datasets_and_years():

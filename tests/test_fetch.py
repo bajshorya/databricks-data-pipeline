@@ -49,3 +49,17 @@ def test_local_file_option_filters_and_writes_sidecar(tmp_path):
     out = tmp_path / "out/provider_drug/data_year=2024/provider_drug_2024.csv.gz"
     assert rc == 0 and out.exists() and Path(str(out) + ".meta.json").exists()
     assert json.loads(Path(str(out) + ".profile.json").read_text())["kept_rows"] == 2
+
+
+def test_zip_input_is_read_without_extracting(tmp_path):
+    import zipfile
+
+    z = tmp_path / "year.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("notes.txt", "ignore me")
+        zf.writestr("data.csv", "".join(PROVIDER))
+    rc = fetch_cms.main(["--dataset", "provider_drug", "--year", "2022", "--states", "RI",
+                         "--out-dir", str(tmp_path / "out"), "--file", str(z)])
+    out = tmp_path / "out/provider_drug/data_year=2022/provider_drug_2022.csv.gz"
+    assert rc == 0 and json.loads(Path(str(out) + ".profile.json").read_text())["kept_rows"] == 2
+    assert not list(tmp_path.glob("*.csv"))                    # nothing was extracted

@@ -7,10 +7,12 @@ import codecs
 import csv
 import gzip
 import hashlib
+import io
 import json
 import sys
 import tomllib
 import urllib.request
+import zipfile
 from collections import Counter
 from pathlib import Path
 
@@ -88,6 +90,16 @@ def stream_lines(url: str):
 
 
 def local_lines(path: str):
+    """Yield lines from a CSV, or from the largest CSV inside a ZIP, without extracting to disk."""
+    if path.lower().endswith(".zip"):
+        with zipfile.ZipFile(path) as z:
+            csvs = [i for i in z.infolist() if i.filename.lower().endswith(".csv")]
+            if not csvs:
+                raise ValueError(f"no .csv inside {path}")
+            member = max(csvs, key=lambda i: i.file_size)
+            with z.open(member) as raw:
+                yield from io.TextIOWrapper(raw, encoding="utf-8", newline="")
+        return
     # newline="" keeps embedded newlines inside quoted fields intact for the csv module
     with open(path, encoding="utf-8", newline="") as f:
         yield from f
@@ -108,8 +120,11 @@ def main(argv=None) -> int:
     ap.add_argument("--head-only", action="store_true")
     ap.add_argument("--file", help="read a CSV you downloaded in a browser, instead of the network")
     a = ap.parse_args(argv)
-    with open(Path(__file__).parent.parent / "config/sources.toml", "rb") as f:
-        url = tomllib.load(f)[a.dataset][str(a.year)]
+    if a.file:
+        url = f"local-file:{Path(a.file).name}"  # downloaded by hand, so no CMS URL applies
+    else:
+        with open(Path(__file__).parent.parent / "config/sources.toml", "rb") as f:
+            url = tomllib.load(f)[a.dataset][str(a.year)]
     if not a.file:
         size = head(url)
         print(f"{a.dataset} {a.year}: {size / 1e9:.2f} GB")
