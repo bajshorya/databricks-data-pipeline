@@ -87,6 +87,12 @@ def stream_lines(url: str):
         yield from codecs.iterdecode(resp, "utf-8", errors="replace")
 
 
+def local_lines(path: str):
+    # newline="" keeps embedded newlines inside quoted fields intact for the csv module
+    with open(path, encoding="utf-8", newline="") as f:
+        yield from f
+
+
 def head(url: str) -> int:
     req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=30) as resp:
@@ -100,16 +106,19 @@ def main(argv=None) -> int:
     ap.add_argument("--states", required=True, help="comma separated, e.g. RI,MA")
     ap.add_argument("--out-dir", default="data/subset")
     ap.add_argument("--head-only", action="store_true")
+    ap.add_argument("--file", help="read a CSV you downloaded in a browser, instead of the network")
     a = ap.parse_args(argv)
     with open(Path(__file__).parent.parent / "config/sources.toml", "rb") as f:
         url = tomllib.load(f)[a.dataset][str(a.year)]
-    size = head(url)
-    print(f"{a.dataset} {a.year}: {size / 1e9:.2f} GB")
-    if a.head_only:
-        return 0
+    if not a.file:
+        size = head(url)
+        print(f"{a.dataset} {a.year}: {size / 1e9:.2f} GB")
+        if a.head_only:
+            return 0
     states = a.states.split(",")
     out = Path(a.out_dir) / a.dataset / f"data_year={a.year}" / f"{a.dataset}_{a.year}.csv.gz"
-    profile = process(stream_lines(url), a.dataset, set(states), out)
+    lines = local_lines(a.file) if a.file else stream_lines(url)
+    profile = process(lines, a.dataset, set(states), out)
     Path(str(out) + ".profile.json").write_text(json.dumps(profile, indent=2))
     meta = write_sidecar(out, a.dataset, a.year, url, states)
     print(f"read {profile['row_count']} rows, kept {profile['kept_rows']}, wrote {meta['bytes']} bytes")

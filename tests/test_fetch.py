@@ -39,3 +39,13 @@ def test_sidecar_hash_and_bytes(tmp_path):
     meta = fetch_cms.write_sidecar(out, "provider_drug", 2024, "http://x", ["RI"])
     on_disk = json.loads(Path(str(out) + ".meta.json").read_text())
     assert on_disk == meta and meta["bytes"] == out.stat().st_size and len(meta["sha256"]) == 64
+
+
+def test_local_file_option_filters_and_writes_sidecar(tmp_path):
+    src = tmp_path / "big.csv"
+    src.write_text("".join(PROVIDER), encoding="utf-8")
+    rc = fetch_cms.main(["--dataset", "provider_drug", "--year", "2024", "--states", "RI",
+                         "--out-dir", str(tmp_path / "out"), "--file", str(src)])
+    out = tmp_path / "out/provider_drug/data_year=2024/provider_drug_2024.csv.gz"
+    assert rc == 0 and out.exists() and Path(str(out) + ".meta.json").exists()
+    assert json.loads(Path(str(out) + ".profile.json").read_text())["kept_rows"] == 2

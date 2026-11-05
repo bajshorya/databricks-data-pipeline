@@ -17,5 +17,4 @@ targets:
     mode: development
     default: true
     workspace:
-      # Set by Shorya: the Free Edition workspace URL (see docs/progress.md).
-      host: https://REPLACE-WITH-WORKSPACE-URL
+      host: https://dbc-c6a80f71-6f05.cloud.databricks.com
