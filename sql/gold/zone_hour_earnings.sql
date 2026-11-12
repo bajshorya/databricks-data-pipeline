@@ -32,5 +32,5 @@ SELECT
                ORDER BY try_divide(driver_earnings, trip_minutes) DESC) AS zone_rank
 FROM by_zone JOIN days USING (day_type)
 -- Only zones where a driver can expect a fare: at least 1 pickup per hour on average.
--- Quiet zones with rare long trips would otherwise top the list (see docs/decisions.md).
+-- Quiet zones with rare long trips (about 1 pickup a day) would otherwise top the list.
 WHERE trips / days >= 1

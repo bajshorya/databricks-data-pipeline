@@ -12,3 +12,12 @@ spark-warehouse/
 metastore_db/
 derby.log
 *.egg-info/
+
+# Private study notes, never uploaded
+study/
+
+# Local-only notes: build instructions, plans, results log, interview prep
+CLAUDE.md
+PROJECT_PLAN.md
+Project plan.md
+docs/*.md

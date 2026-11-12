@@ -23,7 +23,7 @@ TRIP_TYPES = {
 DUPLICATE_KEY = ["vendor_id", "pickup_at", "dropoff_at", "pickup_location_id",
                  "dropoff_location_id", "total_amount"]
 BRONZE_EXTRA = ("source_file", "ingested_at", "month")
-MAX_TRIP_MINUTES = 180  # see docs/decisions.md
+MAX_TRIP_MINUTES = 180  # meters left running: real data had a 6.5-day trip
 
 
 def build_zones(zones_raw: DataFrame) -> DataFrame:
