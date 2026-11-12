@@ -1,8 +1,0 @@
-# UNVERIFIED: names are from memory. Replace with real headers once a file can be read.
-columns = [
-  "Prscrbr_Geo_Lvl", "Prscrbr_Geo_Cd", "Prscrbr_Geo_Desc", "Brnd_Name", "Gnrc_Name",
-  "Tot_Prscrbrs", "Tot_Clms", "Tot_30day_Fills", "Tot_Drug_Cst", "Tot_Benes",
-  "GE65_Sprsn_Flag", "GE65_Tot_Clms", "GE65_Tot_30day_Fills", "GE65_Tot_Drug_Cst",
-  "GE65_Bene_Sprsn_Flag", "GE65_Tot_Benes", "LIS_Bene_Cst_Shr", "NonLIS_Bene_Cst_Shr",
-  "Opioid_Drug_Flag", "Opioid_LA_Drug_Flag", "Antbtc_Drug_Flag", "Antipsych_Drug_Flag",
-]

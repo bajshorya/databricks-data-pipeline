@@ -1,6 +1,0 @@
-pyproject.toml
-src/partd.egg-info/PKG-INFO
-src/partd.egg-info/SOURCES.txt
-src/partd.egg-info/dependency_links.txt
-src/partd.egg-info/requires.txt
-src/partd.egg-info/top_level.txt

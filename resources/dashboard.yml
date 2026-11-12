@@ -1,0 +1,7 @@
+resources:
+  dashboards:
+    pipeline_dashboard:
+      display_name: NYC Taxi Driver Shift Planner
+      file_path: ../dashboards/pipeline.lvdash.json
+      warehouse_id: 1077001b73e3617a  # Serverless Starter Warehouse
+      embed_credentials: false

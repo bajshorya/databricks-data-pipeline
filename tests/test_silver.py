@@ -1,114 +1,74 @@
-from pathlib import Path
+from decimal import Decimal
 
-import pytest
-from pyspark.sql import functions as F
-
-from partd import bronze, silver
-from partd.config import load_settings
-
-CONFIG = Path(__file__).parent.parent / "config"
-PCOLS = bronze.load_expected(str(CONFIG), "provider_drug")
-GCOLS = bronze.load_expected(str(CONFIG), "geo_drug")
-
-
-def frame(spark, cols, rows, year=2024):
-    """Bronze-shaped DataFrame: every column a string, plus data_year and _corrupt_record."""
-    data = [tuple(r.get(c) for c in cols) + (None, year) for r in rows]
-    return spark.createDataFrame(data, ", ".join(f"{c} STRING" for c in cols)
-                                 + ", _corrupt_record STRING, data_year INT")
-
-
-def prov(npi="1000000001", brand="Lipitor", generic="Atorvastatin", claims="20", cost="100.50",
-         state="RI", specialty="Cardiology", **kw):
-    return {"Prscrbr_NPI": npi, "Prscrbr_Last_Org_Name": "SYNTHETICLAST",
-            "Prscrbr_First_Name": "SYNTHETICFIRST", "Prscrbr_City": "Providence",
-            "Prscrbr_State_Abrvtn": state, "Prscrbr_Type": specialty, "Prscrbr_Type_Src": "Medicare",
-            "Brnd_Name": brand, "Gnrc_Name": generic, "Tot_Clms": claims, "Tot_Drug_Cst": cost,
-            "Tot_30day_Fills": "25.0", "Tot_Day_Suply": "600", **kw}
+from helpers import bronze_frame, trip, zones_raw
+from pipeline import silver
 
 
 def build(spark, rows):
-    return silver.build_provider(frame(spark, PCOLS, rows), "run1")
+    zones = silver.build_zones(zones_raw(spark))
+    return silver.build_trips(bronze_frame(spark, rows), zones, "2024-01", "run1")
 
 
-def test_valid_plus_rejected_equals_input_and_codes(spark):
-    rows = [prov(), prov(npi="123"), prov(npi="1000000002", claims="5"),
-            prov(npi="1000000003", claims="abc"), prov(npi="1000000004", cost="-1"),
-            prov(npi="1000000005", brand="  ", generic=" "),
-            prov(npi="1000000006", GE65_Tot_Clms="99")]
-    p, _, q = build(spark, rows)
-    assert p.count() + q.count() == len(rows) and p.count() == 1
-    codes = {c for r in q.collect() for c in r["reject_reasons"]}
-    assert {"invalid_npi", "claims_below_11", "non_numeric_total_claims", "negative_cost",
-            "missing_drug_name", "ge65_claims_exceed_total"} <= codes
+def reasons(quarantine):
+    return [sorted(r["reject_reasons"]) for r in quarantine.collect()]
 
 
-def test_blank_beneficiaries_stay_null_not_rejected(spark):
-    p, _, q = build(spark, [prov(Tot_Benes="")])
-    assert q.count() == 0 and p.first()["total_beneficiaries"] is None
+def test_valid_row_is_typed_and_joined_to_zones(spark):
+    trips, q = build(spark, [trip()])
+    assert q.count() == 0
+    row = trips.first()
+    assert row["total_amount"] == Decimal("20.00") and row["pickup_location_id"] == 1
+    assert row["pickup_borough"] == "EWR" and row["dropoff_zone"] == "Jamaica Bay"
+    assert row["trip_minutes"] == Decimal("20.00")
+    assert row["driver_earnings"] == Decimal("17.00")      # fare 15 + tip 2
+    assert dict(trips.dtypes)["pickup_at"] == "timestamp"
 
 
-def test_quarantine_and_silver_have_no_names(spark):
-    rows = [prov(npi="bad"), prov()]
-    p, py, q = build(spark, rows)
-    assert "SYNTHETICLAST" not in "".join(r["raw_row"] for r in q.collect())
-    for df in (p, py, q):
-        assert not [c for c in df.columns if "name" in c and c not in ("brand_name", "generic_name")]
-    corrupt = frame(spark, PCOLS, [prov()]).withColumn("_corrupt_record", F.lit("SYNTHETICLAST,raw line"))
-    _, _, q2 = silver.build_provider(corrupt, "r")
-    assert "SYNTHETICLAST" not in "".join(r["raw_row"] for r in q2.collect())
+def test_each_rule_has_its_reason(spark):
+    cases = {
+        "bad_type": trip(passengers="two"),
+        "missing_timestamp": trip(pickup=None),
+        "dropoff_before_pickup": trip(dropoff="2024-01-10 07:00:00"),
+        "outside_month": trip(pickup="2023-12-31 23:50:00", dropoff="2024-01-01 00:10:00"),
+        "non_positive_distance": trip(distance="0"),
+        "bad_amount": trip(fare="-5.00"),
+        "trip_too_long": trip(dropoff="2024-01-10 11:01:00"),   # 181 minutes
+        "unknown_zone": trip(pu="999"),
+        "bad_passenger_count": trip(passengers="12"),
+    }
+    for code, row in cases.items():
+        _, q = build(spark, [row])
+        assert code in reasons(q)[0], (code, reasons(q))
 
 
-def test_grain_unique_and_prescriber_year_picks_top_claims(spark):
-    rows = [prov(brand="A", generic="G1", claims="50", state="RI", specialty="Cardiology"),
-            prov(brand="B", generic="G2", claims="20", state="MA", specialty="Family Practice")]
-    p, py, _ = build(spark, rows)
-    assert p.count() == p.dropDuplicates(["data_year", "npi", "brand_name", "generic_name"]).count()
-    only = py.collect()
-    assert len(only) == 1 and only[0]["state"] == "RI" and only[0]["specialty"] == "Cardiology"
+def test_row_can_have_several_reasons(spark):
+    _, q = build(spark, [trip(distance="0", total="-1.00")])
+    assert reasons(q) == [["bad_amount", "non_positive_distance"]]
 
 
-def geo(level="National", brand="Lipitor", generic="Atorvastatin", opioid="N", cost="500.00", **kw):
-    return {"Prscrbr_Geo_Lvl": level, "Prscrbr_Geo_Cd": "", "Prscrbr_Geo_Desc": level,
-            "Brnd_Name": brand, "Gnrc_Name": generic, "Tot_Prscrbrs": "10", "Tot_Clms": "100",
-            "Tot_30day_Fills": "110.0", "Tot_Drug_Cst": cost, "Opioid_Drug_Flag": opioid,
-            "Opioid_LA_Drug_Flag": "N", "Antbtc_Drug_Flag": "N", "Antipsych_Drug_Flag": "N", **kw}
+def test_missing_or_negative_tip_is_a_bad_amount(spark):
+    _, q = build(spark, [trip(tip=None), trip(tip="-1.00", pu="3")])
+    assert reasons(q) == [["bad_amount"], ["bad_amount"]]
 
 
-def test_geo_flags_national_only_and_invalid_flag_quarantined(spark):
-    rows = [geo(opioid="Y", brand="Oxy", generic="Oxycodone"), geo(level="State", opioid="N"),
-            geo(brand="Weird", generic="W", opioid="Q")]
-    g, dy, q = silver.build_geo(frame(spark, GCOLS, rows), "r")
-    assert g.count() == 2 and dy.count() == 1             # state row not in drug_year
-    assert dy.first()["is_opioid"] is True
-    assert [r["reject_reasons"] for r in q.collect()] == [["invalid_flag"]]
+def test_three_hour_trip_is_allowed(spark):
+    trips, q = build(spark, [trip(dropoff="2024-01-10 11:00:00")])
+    assert q.count() == 0 and trips.count() == 1
 
 
-def test_name_differs_from_generic(spark):
-    rows = [geo(brand="Lipitor", generic="Atorvastatin"), geo(brand="Metformin", generic="metformin ")]
-    _, dy, _ = silver.build_geo(frame(spark, GCOLS, rows), "r")
-    got = {r["brand_name"]: r["name_differs_from_generic"] for r in dy.collect()}
-    assert got == {"LIPITOR": True, "METFORMIN": False}
+def test_null_passenger_count_is_allowed(spark):
+    trips, q = build(spark, [trip(passengers=None)])
+    assert q.count() == 0 and trips.first()["passenger_count"] is None
 
 
-@pytest.fixture
-def s(spark):
-    for layer in ("bronze", "silver"):
-        spark.sql(f"CREATE DATABASE IF NOT EXISTS sv_{layer}")
-    cfg = load_settings(CONFIG, catalog="spark_catalog", schema_prefix="sv")
-    return cfg
+def test_duplicates_keep_one_copy_and_quarantine_the_rest(spark):
+    trips, q = build(spark, [trip(), trip(), trip(), trip(pu="3")])
+    assert trips.count() == 2
+    assert reasons(q) == [["duplicate"], ["duplicate"]]
 
 
-def test_rerun_replaces_year_without_duplicates(spark, s):
-    for ds, cols, rows in (("provider_drug", PCOLS, [prov(), prov(npi="bad")]),
-                           ("geo_drug", GCOLS, [geo()])):
-        t = s.table("bronze", f"{ds}_raw")
-        spark.sql(f"DROP TABLE IF EXISTS {t}")
-        frame(spark, cols, rows).write.format("delta").partitionBy("data_year").saveAsTable(t)
-    for t in ("prescription", "quarantine", "prescriber_year", "geo_drug", "drug_year"):
-        spark.sql(f"DROP TABLE IF EXISTS {s.table('silver', t)}")
-    silver.build_silver(spark, s, 2024, "r1")
-    silver.build_silver(spark, s, 2024, "r2")
-    assert spark.table(s.table("silver", "prescription")).count() == 1
-    q = spark.table(s.table("silver", "quarantine"))
-    assert q.count() == 1 and q.first()["run_id"] == "r2"
+def test_every_input_row_ends_up_in_exactly_one_table(spark):
+    rows = [trip(), trip(), trip(distance="0"), trip(pu="3"), trip(pickup=None)]
+    trips, q = build(spark, rows)
+    assert trips.count() + q.count() == len(rows)
+    assert all('"trip_distance"' in r["raw_row"] for r in q.collect())   # original row is kept

@@ -1,13 +1,19 @@
+# Six tasks, one per step. Every task runs jobs/run_task.py and passes its own --task name.
+# A check task raises when a check fails; Databricks then skips every task after it.
 resources:
   jobs:
-    partd_pipeline:
-      name: partd_pipeline
+    pipeline_job:
+      name: pipeline_job
       max_concurrent_runs: 1
+      # Monthly batch: on the 5th, process the newest month landed in the Volume.
+      # A manual run can pass a specific month instead, e.g. --params month=2024-01.
+      schedule:
+        quartz_cron_expression: "0 0 6 5 * ?"
+        timezone_id: UTC
+        pause_status: UNPAUSED
       parameters:
-        - name: data_year
-          default: "2024"
-        - name: force
-          default: "false"
+        - name: month
+          default: "latest"
       environments:
         - environment_key: default
           spec:
@@ -16,77 +22,85 @@ resources:
         - task_key: load_bronze
           environment_key: default
           spark_python_task:
-            python_file: ../jobs/run_bronze.py
+            python_file: ../jobs/run_task.py
             parameters:
-              - "--data-year={{job.parameters.data_year}}"
-              - "--force={{job.parameters.force}}"
+              - "--task=load_bronze"
+              - "--month={{job.parameters.month}}"
               - "--run-id={{job.run_id}}"
               - "--catalog=${var.catalog}"
-              - "--schema-prefix=${var.schema_prefix}"
+              - "--src-path=${workspace.file_path}/src"
+              - "--config-dir=${workspace.file_path}/config"
+              - "--sql-dir=${workspace.file_path}/sql"
+        - task_key: check_bronze
+          depends_on: [{task_key: load_bronze}]
+          environment_key: default
+          # A failed check fails the same way every time, so retrying only wastes compute.
+          # max_retries alone isn't enough: serverless auto-optimization still retries once.
+          max_retries: 0
+          disable_auto_optimization: true
+          spark_python_task:
+            python_file: ../jobs/run_task.py
+            parameters:
+              - "--task=check_bronze"
+              - "--month={{job.parameters.month}}"
+              - "--run-id={{job.run_id}}"
+              - "--catalog=${var.catalog}"
               - "--src-path=${workspace.file_path}/src"
               - "--config-dir=${workspace.file_path}/config"
               - "--sql-dir=${workspace.file_path}/sql"
         - task_key: build_silver
-          depends_on:
-            - task_key: load_bronze
+          depends_on: [{task_key: check_bronze}]
           environment_key: default
           spark_python_task:
-            python_file: ../jobs/run_silver.py
+            python_file: ../jobs/run_task.py
             parameters:
-              - "--data-year={{job.parameters.data_year}}"
-              - "--force={{job.parameters.force}}"
+              - "--task=build_silver"
+              - "--month={{job.parameters.month}}"
               - "--run-id={{job.run_id}}"
               - "--catalog=${var.catalog}"
-              - "--schema-prefix=${var.schema_prefix}"
               - "--src-path=${workspace.file_path}/src"
               - "--config-dir=${workspace.file_path}/config"
               - "--sql-dir=${workspace.file_path}/sql"
         - task_key: check_silver
-          depends_on:
-            - task_key: build_silver
-          # A failed quality gate is deterministic, so a retry only burns compute quota.
-          max_retries: 0
+          depends_on: [{task_key: build_silver}]
           environment_key: default
+          max_retries: 0
+          disable_auto_optimization: true
           spark_python_task:
-            python_file: ../jobs/run_check_silver.py
+            python_file: ../jobs/run_task.py
             parameters:
-              - "--data-year={{job.parameters.data_year}}"
-              - "--force={{job.parameters.force}}"
+              - "--task=check_silver"
+              - "--month={{job.parameters.month}}"
               - "--run-id={{job.run_id}}"
               - "--catalog=${var.catalog}"
-              - "--schema-prefix=${var.schema_prefix}"
               - "--src-path=${workspace.file_path}/src"
               - "--config-dir=${workspace.file_path}/config"
               - "--sql-dir=${workspace.file_path}/sql"
         - task_key: build_gold
-          depends_on:
-            - task_key: check_silver
+          depends_on: [{task_key: check_silver}]
           environment_key: default
           spark_python_task:
-            python_file: ../jobs/run_gold.py
+            python_file: ../jobs/run_task.py
             parameters:
-              - "--data-year={{job.parameters.data_year}}"
-              - "--force={{job.parameters.force}}"
+              - "--task=build_gold"
+              - "--month={{job.parameters.month}}"
               - "--run-id={{job.run_id}}"
               - "--catalog=${var.catalog}"
-              - "--schema-prefix=${var.schema_prefix}"
               - "--src-path=${workspace.file_path}/src"
               - "--config-dir=${workspace.file_path}/config"
               - "--sql-dir=${workspace.file_path}/sql"
         - task_key: check_gold
-          depends_on:
-            - task_key: build_gold
-          # A failed quality gate is deterministic, so a retry only burns compute quota.
-          max_retries: 0
+          depends_on: [{task_key: build_gold}]
           environment_key: default
+          max_retries: 0
+          disable_auto_optimization: true
           spark_python_task:
-            python_file: ../jobs/run_check_gold.py
+            python_file: ../jobs/run_task.py
             parameters:
-              - "--data-year={{job.parameters.data_year}}"
-              - "--force={{job.parameters.force}}"
+              - "--task=check_gold"
+              - "--month={{job.parameters.month}}"
               - "--run-id={{job.run_id}}"
               - "--catalog=${var.catalog}"
-              - "--schema-prefix=${var.schema_prefix}"
               - "--src-path=${workspace.file_path}/src"
               - "--config-dir=${workspace.file_path}/config"
               - "--sql-dir=${workspace.file_path}/sql"

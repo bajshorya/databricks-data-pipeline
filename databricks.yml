@@ -1,5 +1,5 @@
 bundle:
-  name: medicare_partd_lakehouse
+  name: databricks_data_pipeline
 
 include:
   - resources/*.yml
@@ -8,13 +8,10 @@ variables:
   catalog:
     description: Unity Catalog catalog
     default: workspace
-  schema_prefix:
-    description: Prefix for all project schemas
-    default: partd
 
 targets:
   dev:
-    mode: development
+    # No `mode: development`: it forces schedules to stay paused, and the job runs monthly.
     default: true
     workspace:
       host: https://dbc-c6a80f71-6f05.cloud.databricks.com

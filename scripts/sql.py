@@ -5,8 +5,9 @@ import subprocess
 import sys
 
 WAREHOUSE = "1077001b73e3617a"  # Serverless Starter Warehouse
-# The CLI login is stored per host; outside the bundle folder the host must be given.
-ENV = {**os.environ, "DATABRICKS_HOST": "https://dbc-c6a80f71-6f05.cloud.databricks.com"}
+# Outside the bundle folder the CLI needs the host and the saved login profile named explicitly.
+ENV = {**os.environ, "DATABRICKS_HOST": "https://dbc-c6a80f71-6f05.cloud.databricks.com",
+       "DATABRICKS_CONFIG_PROFILE": "DEFAULT"}
 
 
 def run(statement: str) -> list[list]:
@@ -16,7 +17,7 @@ def run(statement: str) -> list[list]:
     r = json.loads(out)
     if r["status"]["state"] != "SUCCEEDED":
         raise RuntimeError(r["status"])
-    cols = [c["name"] for c in r["manifest"]["schema"]["columns"]]
+    cols = [c["name"] for c in r["manifest"]["schema"].get("columns", [])]  # DDL has none
     rows = r.get("result", {}).get("data_array", [])
     print(" | ".join(cols))
     for row in rows:
